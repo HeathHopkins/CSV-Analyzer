@@ -15,16 +15,21 @@ namespace CsvAnalyzer
         {
             var dir = @"nih\awards";
 
+            if (args.Length > 0)
+                dir = args[0];
+
             // assume first row has column names
 
             var fileNames = Directory.GetFiles(dir);
 
-            var fields = new Dictionary<int, Field>(); // <position, Field>
+            var fields = new Dictionary<string, Field>(); // <name, Field>
             
             fileNames.ToList().ForEach(fileName =>
             {
                 using (var reader = File.OpenText(fileName))
                 {
+                    Console.WriteLine($"Reading {Path.GetFileName(fileName)}");
+                    var count = 0;
                     using (var csv = new CsvReader(reader))
                     {
                         csv.Configuration.HasHeaderRecord = true;
@@ -32,22 +37,40 @@ namespace CsvAnalyzer
                         while (csv.Read())
                         {
                             // field names are not available until the first Read() call
-                            if (!fieldsLoaded && fields.Count == 0)
+                            if (!fieldsLoaded)
                             {
                                 for (int i = 0; i < csv.FieldHeaders.Length; i++)
-                                    fields.Add(i, new Field(i, csv.FieldHeaders[i]));
+                                {
+                                    var header = csv.FieldHeaders[i];
+                                    if (!fields.ContainsKey(header))
+                                        fields.Add(header, new Field(i, csv.FieldHeaders[i]));
+                                }
                                 fieldsLoaded = true;
                             }
 
                             for (int i = 0; i < csv.FieldHeaders.Length; i++)
-                                fields[i].AnalyzeNewValue(csv.GetField(i));
+                            {
+                                var header = csv.FieldHeaders[i];
+                                fields[header].AnalyzeNewValue(csv.GetField(header));
+                            }
+
+                            count++;
                         }
 
-
+                        Console.WriteLine($"Read {count} records");
+                        Console.WriteLine();
                     }
                 }
             });
 
+
+            var sb = new StringBuilder();
+            sb.AppendLine(Field.GetHeaders());
+            fields.Select(o => o.Value).ToList().ForEach(field =>
+            {
+                sb.AppendLine(field.ToString());
+            });
+            File.WriteAllText("result.txt", sb.ToString());
         }
     }
 
@@ -69,7 +92,7 @@ namespace CsvAnalyzer
         public int MaxStringLength { get; set; }
         public int MaxDecimalPlaces { get; set; }
 
-        static readonly Regex NumericRegEx = new Regex(@"^[0-9\.,]+$");
+        static readonly Regex NumericRegEx = new Regex(@"^[0-9\.,]+$", RegexOptions.Compiled | RegexOptions.Multiline);
 
         public void AnalyzeNewValue(string value)
         {
@@ -94,6 +117,10 @@ namespace CsvAnalyzer
         public override string ToString()
         {
             return $"{Position}\t{Name}\t{Type.ToString()}\t{MaxStringLength}\t{MaxDecimalPlaces}";
+        }
+        public static string GetHeaders()
+        {
+            return $"{nameof(Position)}\t{nameof(Name)}\t{nameof(Type)}\t{nameof(MaxStringLength)}\t{nameof(MaxDecimalPlaces)}";
         }
     }
 
